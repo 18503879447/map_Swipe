@@ -114,14 +114,18 @@ timelineSlider.addEventListener('input', (e) => {
 
 updateMapTimeline(2026);
 
-// 👑 卷帘切换控制逻辑【核心修复点】
+// 卷帘切换控制逻辑
+const swipeBar = document.getElementById('swipe-bar');
+const swipeHandle = document.getElementById('swipe-handle');
+const mapContainer = document.getElementById('map-container');
+const panelLayerB = document.getElementById('panel-layerB');
+
 document.getElementById('swipe-mode').addEventListener('change', (e) => {
     currentMode = e.target.value;
     const mapA_Dom = document.getElementById('mapA');
     const mapB_Dom = document.getElementById('mapB');
 
     if (currentMode === 'off') {
-        // 关闭卷帘：隐藏 MapB 并完全取消其鼠标事件响应，将 MapA 重新作为交互主体
         swipeBar.style.display = 'none';
         mapB_Dom.style.display = 'none'; 
         mapB_Dom.style.pointerEvents = 'none';
@@ -131,11 +135,12 @@ document.getElementById('swipe-mode').addEventListener('change', (e) => {
         mapA_Dom.style.pointerEvents = 'auto';
         panelLayerB.style.display = 'none';
     } else {
-        // 开启卷帘：双图层恢复激活状态
         swipeBar.style.display = 'block';
         panelLayerB.style.display = 'block';
         mapB_Dom.style.display = 'block'; 
-        mapB_Dom.style.pointerEvents = 'auto'; // 卷帘下各负其责
+        mapB_Dom.style.pointerEvents = 'auto'; 
+        mapB_Dom.style.zIndex = '20'; 
+        mapA_Dom.style.zIndex = '10';
         
         if (currentMode === 'vertical') {
             swipeBar.className = 'swipe-vertical'; swipeHandle.innerHTML = '↔';
@@ -147,6 +152,32 @@ document.getElementById('swipe-mode').addEventListener('change', (e) => {
         renderSwipe();
     }
     setTimeout(() => { mapA.invalidateSize(); mapB.invalidateSize(); }, 200);
+});
+
+function renderSwipe() {
+    const width = mapContainer.offsetWidth;
+    const height = mapContainer.offsetHeight;
+    if (currentMode === 'vertical') {
+        const x = width * swipePercent; swipeBar.style.left = `${x}px`;
+        document.getElementById('mapB').style.clipPath = `inset(0px 0px 0px ${x}px)`;
+    } else if (currentMode === 'horizontal') {
+        const y = height * swipePercent; swipeBar.style.top = `${y}px`;
+        document.getElementById('mapB').style.clipPath = `inset(${y}px 0px 0px 0px)`;
+    }
+}
+
+let isDragging = false;
+swipeBar.addEventListener('mousedown', (e) => { isDragging = true; e.preventDefault(); });
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const rect = mapContainer.getBoundingClientRect();
+    if (currentMode === 'vertical') {
+        let clientX = e.clientX - rect.left; swipePercent = Math.max(0, Math.min(clientX, rect.width)) / rect.width;
+    } else if (currentMode === 'horizontal') {
+        let clientY = e.clientY - rect.top; swipePercent = Math.max(0, Math.min(clientY, rect.height)) / rect.height;
+    }
+    renderSwipe();
 });
 
 // 双栈视图导航追踪机制
@@ -303,37 +334,6 @@ async function handleShapefileUpload(fileInputId, targetGeoJsonLayer, targetMap)
 document.getElementById('btn-layerA').addEventListener('click', () => handleShapefileUpload('file-layerA', shpLayerA, mapA));
 document.getElementById('btn-layerB').addEventListener('click', () => handleShapefileUpload('file-layerB', shpLayerB, mapB));
 
-const swipeBar = document.getElementById('swipe-bar');
-const swipeHandle = document.getElementById('swipe-handle');
-const mapContainer = document.getElementById('map-container');
-const panelLayerB = document.getElementById('panel-layerB');
-
-function renderSwipe() {
-    const width = mapContainer.offsetWidth;
-    const height = mapContainer.offsetHeight;
-    if (currentMode === 'vertical') {
-        const x = width * swipePercent; swipeBar.style.left = `${x}px`;
-        document.getElementById('mapB').style.clipPath = `inset(0px 0px 0px ${x}px)`;
-    } else if (currentMode === 'horizontal') {
-        const y = height * swipePercent; swipeBar.style.top = `${y}px`;
-        document.getElementById('mapB').style.clipPath = `inset(${y}px 0px 0px 0px)`;
-    }
-}
-
-let isDragging = false;
-swipeBar.addEventListener('mousedown', (e) => { isDragging = true; e.preventDefault(); });
-window.addEventListener('mouseup', () => isDragging = false);
-window.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const rect = mapContainer.getBoundingClientRect();
-    if (currentMode === 'vertical') {
-        let clientX = e.clientX - rect.left; swipePercent = Math.max(0, Math.min(clientX, rect.width)) / rect.width;
-    } else if (currentMode === 'horizontal') {
-        let clientY = e.clientY - rect.top; swipePercent = Math.max(0, Math.min(clientY, rect.height)) / rect.height;
-    }
-    renderSwipe();
-});
-
 const sidebar = document.getElementById('sidebar');
 const toggleBtn = document.getElementById('toggle-btn');
 toggleBtn.addEventListener('click', () => {
@@ -346,90 +346,168 @@ toggleBtn.addEventListener('click', () => {
 
 document.getElementById('btn-home').addEventListener('click', () => mapA.setView(MIANYANG_CENTER, MIANYANG_ZOOM));
 
-// --- 📐 空间交互测量引擎 ---
+
+// --- 📐 👑 【空间交互测量引擎 V3 - 顶层提示与结果固化版】 ---
 let measurePoints = [];
-let drawingLayers = L.layerGroup().addTo(mapA); 
-let guideLine = null; 
+let drawingLayersA = L.layerGroup().addTo(mapA); 
+let drawingLayersB = L.layerGroup().addTo(mapB); 
+
+let guideLineA = null; 
+let guideLineB = null; 
+
+// 👑 动态构建并注入顶部操作引导提示牌 DOM
+let topHintPanel = document.getElementById('gis-top-hint');
+if (!topHintPanel) {
+    topHintPanel = document.createElement('div');
+    topHintPanel.id = 'gis-top-hint';
+    // 设置符合主流B端运检大屏的拟物微拟伏悬浮样式
+    Object.assign(topHintPanel.style, {
+        position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)',
+        background: 'rgba(0, 0, 0, 0.75)', color: '#fff', padding: '10px 20px',
+        borderRadius: '4px', fontSize: '13px', zIndex: '2000', pointerEvents: 'none',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)', display: 'none', letterSpacing: '0.5px',
+        borderLeft: '4px solid #1890ff', fontFamily: 'sans-serif'
+    });
+    document.getElementById('main-container').appendChild(topHintPanel);
+}
 
 function setActiveTool(toolName) {
     activeTool = toolName;
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-    if (toolName === 'identify') document.getElementById('btn-identify').classList.add('active');
-    if (toolName === 'distance') document.getElementById('btn-measure-dist').classList.add('active');
-    if (toolName === 'area') document.getElementById('btn-measure-area').classList.add('active');
+    
+    if (toolName === 'identify') {
+        document.getElementById('btn-identify').classList.add('active');
+        topHintPanel.style.display = 'none'; // 切换回识别自动关闭
+    }
+    if (toolName === 'distance') {
+        document.getElementById('btn-measure-dist').classList.add('active');
+        topHintPanel.innerHTML = `⚙️ <b>测距模式激活</b>：鼠标左键在地图任意位置点击打点，<b>双击或点击鼠标右键</b>结束量测并固定结果`;
+        topHintPanel.style.display = 'block';
+    }
+    if (toolName === 'area') {
+        document.getElementById('btn-measure-area').classList.add('active');
+        topHintPanel.innerHTML = `⚙️ <b>测面模式激活</b>：鼠标左键依次点击拐点围成区域，<b>双击或点击鼠标右键</b>自动闭合图形并固定结果`;
+        topHintPanel.style.display = 'block';
+    }
     clearMeasurement();
 }
 
-function clearMeasurement() { drawingLayers.clearLayers(); measurePoints = []; if (guideLine) { drawingLayers.removeLayer(guideLine); guideLine = null; } }
+function clearMeasurement() { 
+    drawingLayersA.clearLayers(); 
+    drawingLayersB.clearLayers(); 
+    measurePoints = []; 
+    if (guideLineA) { mapA.removeLayer(guideLineA); guideLineA = null; }
+    if (guideLineB) { mapB.removeLayer(guideLineB); guideLineB = null; }
+}
 
 document.getElementById('btn-identify').classList.add('active');
 document.getElementById('btn-identify').addEventListener('click', () => setActiveTool('identify'));
 document.getElementById('btn-measure-dist').addEventListener('click', () => { setActiveTool('distance'); });
 document.getElementById('btn-measure-area').addEventListener('click', () => { setActiveTool('area'); });
 
-// 测量打点捕捉
+// 统一打点捕捉函数 (A/B两窗映射)
 function handleMapClick(e) {
     if (activeTool === 'identify') return;
     if (e.originalEvent && e.originalEvent.detail > 1) return; 
     const latlng = e.latlng;
     measurePoints.push(latlng);
-    L.circleMarker(latlng, { radius: 4, color: '#ff4d4f', fillColor: '#fff', fillOpacity: 1 }).addTo(drawingLayers);
+    
+    L.circleMarker(latlng, { radius: 4, color: '#ff4d4f', fillColor: '#fff', fillOpacity: 1 }).addTo(drawingLayersA);
+    L.circleMarker(latlng, { radius: 4, color: '#ff4d4f', fillColor: '#fff', fillOpacity: 1 }).addTo(drawingLayersB);
+    
     if (activeTool === 'distance' && measurePoints.length > 1) { 
-        L.polyline([measurePoints[measurePoints.length - 2], latlng], { color: '#ef4444', weight: 3 }).addTo(drawingLayers); 
+        const p1 = measurePoints[measurePoints.length - 2];
+        L.polyline([p1, latlng], { color: '#ef4444', weight: 3 }).addTo(drawingLayersA);
+        L.polyline([p1, latlng], { color: '#ef4444', weight: 3 }).addTo(drawingLayersB);
     }
 }
 
-// 鼠标悬浮伴随计算
+// 统一动态悬浮线计算
 function handleMapMouseMove(e) {
     if (activeTool === 'identify' || measurePoints.length === 0) return;
     const currentLngLat = e.latlng;
-    if (guideLine) { drawingLayers.removeLayer(guideLine); }
+    
+    if (guideLineA) { mapA.removeLayer(guideLineA); guideLineA = null; }
+    if (guideLineB) { mapB.removeLayer(guideLineB); guideLineB = null; }
+
+    let infoText = "";
+
     if (activeTool === 'distance') {
-        guideLine = L.polyline([measurePoints[measurePoints.length - 1], currentLngLat], { color: '#ff4d4f', weight: 2, dashArray: '5, 5' }).addTo(drawingLayers);
         let tempDist = 0;
         for(let i = 1; i < measurePoints.length; i++) { tempDist += measurePoints[i-1].distanceTo(measurePoints[i]); }
         tempDist += measurePoints[measurePoints.length - 1].distanceTo(currentLngLat);
-        let text = tempDist > 1000 ? (tempDist/1000).toFixed(2) + ' km' : tempDist.toFixed(0) + ' m';
-        guideLine.bindTooltip(`当前长度: ${text}`, { sticky: true, offset: [15, 10], direction: 'right' }).openTooltip();
-    } else if (activeTool === 'area' && measurePoints.length >= 1) {
+        infoText = tempDist > 1000 ? (tempDist/1000).toFixed(2) + ' km' : tempDist.toFixed(0) + ' m';
+        infoText = `当前长度: ${infoText}`;
+
+        guideLineA = L.polyline([measurePoints[measurePoints.length - 1], currentLngLat], { color: '#ff4d4f', weight: 2, dashArray: '5, 5' }).addTo(mapA);
+        guideLineB = L.polyline([measurePoints[measurePoints.length - 1], currentLngLat], { color: '#ff4d4f', weight: 2, dashArray: '5, 5' }).addTo(mapB);
+    } 
+    else if (activeTool === 'area' && measurePoints.length >= 1) {
         let tempLoop = [...measurePoints, currentLngLat];
-        if (tempLoop.length === 2) { guideLine = L.polyline(tempLoop, { color: '#10b981', weight: 2, dashArray: '5, 5' }).addTo(drawingLayers); } 
-        else {
-            guideLine = L.polygon(tempLoop, { color: '#10b981', weight: 2, dashArray: '5, 5', fillColor: '#10b981', fillOpacity: 0.15 }).addTo(drawingLayers);
+        if (tempLoop.length === 2) {
+            infoText = "请继续点击绘制面";
+            guideLineA = L.polyline(tempLoop, { color: '#10b981', weight: 2, dashArray: '5, 5' }).addTo(mapA);
+            guideLineB = L.polyline(tempLoop, { color: '#10b981', weight: 2, dashArray: '5, 5' }).addTo(mapB);
+        } else {
             let area = calculatePlanarArea(tempLoop);
-            let text = area > 1000000 ? (area/1000000).toFixed(2) + ' km²' : area.toFixed(0) + ' ㎡';
-            guideLine.bindTooltip(`实时面积: ${text}`, { sticky: true, offset: [15, 10], direction: 'right' }).openTooltip();
+            let areaText = area > 1000000 ? (area/1000000).toFixed(2) + ' km²' : area.toFixed(0) + ' ㎡';
+            infoText = `实时面积: ${areaText}`;
+
+            guideLineA = L.polygon(tempLoop, { color: '#10b981', weight: 2, dashArray: '5, 5', fillColor: '#10b981', fillOpacity: 0.15 }).addTo(mapA);
+            guideLineB = L.polygon(tempLoop, { color: '#10b981', weight: 2, dashArray: '5, 5', fillColor: '#10b981', fillOpacity: 0.15 }).addTo(mapB);
         }
     }
+
+    if (guideLineA && infoText) guideLineA.bindTooltip(infoText, { sticky: true, offset: [15, 10], direction: 'right' }).openTooltip();
+    if (guideLineB && infoText) guideLineB.bindTooltip(infoText, { sticky: true, offset: [15, 10], direction: 'right' }).openTooltip();
 }
 
-// 结束测量渲染
+// 👑 【核心优化点】结束测量时，直接通过 permanent 机制无条件固化渲染最终结果
 function finishMeasurement() {
     if (activeTool === 'identify' || measurePoints.length === 0) return;
-    if (guideLine) { drawingLayers.removeLayer(guideLine); guideLine = null; }
+    
+    if (guideLineA) { mapA.removeLayer(guideLineA); guideLineA = null; }
+    if (guideLineB) { mapB.removeLayer(guideLineB); guideLineB = null; }
+    
     const uniquePoints = [];
     for(let p of measurePoints) { if(uniquePoints.length === 0 || p.distanceTo(uniquePoints[uniquePoints.length-1]) > 0.5) { uniquePoints.push(p); } }
+    
     if (activeTool === 'distance' && uniquePoints.length >= 2) {
         let totalDist = 0;
         for(let i = 1; i < uniquePoints.length; i++) { totalDist += uniquePoints[i-1].distanceTo(uniquePoints[i]); }
         let text = totalDist > 1000 ? (totalDist/1000).toFixed(2) + ' km' : totalDist.toFixed(0) + ' m';
-        L.polyline(uniquePoints, { color: '#ef4444', weight: 4 }).addTo(drawingLayers).bindPopup(`<b>📏 总长:</b> ${text}`).openPopup(uniquePoints[uniquePoints.length - 1]);
-    } else if (activeTool === 'area' && uniquePoints.length >= 3) {
+        
+        const finalLineA = L.polyline(uniquePoints, { color: '#ef4444', weight: 4 }).addTo(drawingLayersA);
+        const finalLineB = L.polyline(uniquePoints, { color: '#ef4444', weight: 4 }).addTo(drawingLayersB);
+
+        // 👑 通过 permanent: true 属性强制固化文本，避免依赖 Popup 弹窗二次点击
+        const tooltipConfig = { permanent: true, direction: 'top', className: 'gis-measure-result-label', offset: [0, -10] };
+        finalLineA.bindTooltip(`<b>📏 总长:</b> ${text}`, tooltipConfig).openTooltip();
+        finalLineB.bindTooltip(`<b>📏 总长:</b> ${text}`, tooltipConfig).openTooltip();
+    } 
+    else if (activeTool === 'area' && uniquePoints.length >= 3) {
         let area = calculatePlanarArea(uniquePoints);
         let text = area > 1000000 ? (area/1000000).toFixed(2) + ' km²' : area.toFixed(0) + ' ㎡';
-        L.polygon(uniquePoints, { color: '#10b981', weight: 3, fillColor: '#10b981', fillOpacity: 0.3 }).addTo(drawingLayers).bindPopup(`<b>▱ 总面积:</b> ${text}`).openPopup(uniquePoints[uniquePoints.length - 1]);
+        
+        const finalPolyA = L.polygon(uniquePoints, { color: '#10b981', weight: 3, fillColor: '#10b981', fillOpacity: 0.3 }).addTo(drawingLayersA);
+        const finalPolyB = L.polygon(uniquePoints, { color: '#10b981', weight: 3, fillColor: '#10b981', fillOpacity: 0.3 }).addTo(drawingLayersB);
+
+        // 👑 自动固定在多边形几何中心位置显示面积
+        const tooltipConfig = { permanent: true, direction: 'center', className: 'gis-measure-result-label' };
+        finalPolyA.bindTooltip(`<b>▱ 面积:</b> ${text}`, tooltipConfig).openTooltip();
+        finalPolyB.bindTooltip(`<b>▱ 面积:</b> ${text}`, tooltipConfig).openTooltip();
     }
     measurePoints = []; 
 }
 
-// 👑 交互监听统一注入 MapA 主视图，不受 MapB 影响
-mapA.on('click', handleMapClick); 
-mapA.on('mousemove', handleMapMouseMove);
-mapA.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); finishMeasurement(); });
-mapA.on('dblclick', (e) => { L.DomEvent.stopPropagation(e); finishMeasurement(); });
-
-mapA.doubleClickZoom.disable(); 
-mapB.doubleClickZoom.disable();
+// 全域跨窗口双向监听挂载
+[mapA, mapB].forEach((targetMap) => {
+    targetMap.on('click', handleMapClick); 
+    targetMap.on('mousemove', handleMapMouseMove);
+    targetMap.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); finishMeasurement(); });
+    targetMap.on('dblclick', (e) => { L.DomEvent.stopPropagation(e); finishMeasurement(); });
+    targetMap.doubleClickZoom.disable(); 
+});
 
 function calculatePlanarArea(latlngs) {
     let radius = 6378137, prev = latlngs[latlngs.length - 1], ringArea = 0;
