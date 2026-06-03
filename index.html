@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGIS 智能卷帘与分析系统 Pro</title>
+    <title>地图卷帘模式</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         html, body {
@@ -95,21 +95,21 @@
     <div id="main-container">
         <div id="sidebar">
             <div>
-                <h3>1. 基础多图源切换</h3>
+                <h3>基础多图源切换</h3>
                 <div class="form-group">
                     <label for="basemap-select">选择影像服务商</label>
                     <select id="basemap-select">
-                        <option value="esri" selected>Esri 卫星影像（纯净无注记）</option>
-                        <option value="gaode">高德地图 - 影像系列</option>
+                        <option value="esri" selected>Esri影像</option>
+                        <option value="gaode">高分影像</option>
                         <option value="osm">OSM - 国际标准矢量</option>
                     </select>
                 </div>
             </div>
 
             <div id="panel-timeline">
-                <h3>2. 影像历史时间轴 (按1年精细拖动)</h3>
+                <h3>影像历史时间轴</h3>
                 <div class="timeline-container">
-                    <div id="current-year-display">当前观测时期: 2026年(最新)</div>
+                    <div id="current-year-display">当前观测时期: 2026年</div>
                     <div class="timeline-slider-wrapper">
                         <input type="range" id="timeline-slider" min="2000" max="2026" value="2026" step="1">
                     </div>
@@ -124,7 +124,7 @@
             <hr style="width:100%; border:0; border-top:1px solid #eee; margin:0;">
 
             <div>
-                <h3>3. 卷帘模式控制</h3>
+                <h3>地图卷帘模式</h3>
                 <div class="form-group">
                     <label for="swipe-mode">卷帘模式</label>
                     <select id="swipe-mode">
@@ -138,22 +138,22 @@
             <hr style="width:100%; border:0; border-top:1px solid #eee; margin:0;">
 
             <div>
-                <h3>4. 数据加载 (图层 A / 基准)</h3>
+                <h3>数据加载 (基准视图)</h3>
                 <div class="form-group">
                     <label>加载本地 Shapefile</label>
                     <input type="file" id="file-layerA" accept=".shp,.dbf,.shx" multiple>
                     <p class="hint">提示：按住 Ctrl 可同时框选上传 .shp 和 .dbf 文件</p>
-                    <button id="btn-layerA">加载到图层 A</button>
+                    <button id="btn-layerA">加载到基准视图</button>
                 </div>
             </div>
 
             <div id="panel-layerB" style="display: none;">
-                <h3>5. 数据加载 (图层 B / 卷帘)</h3>
+                <h3>5. 数据加载 (卷帘视图)</h3>
                 <div class="form-group">
                     <label>加载本地 Shapefile</label>
                     <input type="file" id="file-layerB" accept=".shp,.dbf,.shx" multiple>
                     <p class="hint">提示：按住 Ctrl 可同时框选上传 .shp 和 .dbf 文件</p>
-                    <button id="btn-layerB">加载到图层 B</button>
+                    <button id="btn-layerB">加载到卷帘视图</button>
                 </div>
             </div>
         </div>
@@ -163,7 +163,7 @@
         <div id="right-toolbox">
             <button class="tool-btn" id="btn-view-prev" title="上一视图 (⏮️)" disabled>⏮️</button>
             <button class="tool-btn" id="btn-view-next" title="下一视图 (⏭️)" disabled>⏭️</button>
-            <button class="tool-btn" id="btn-home" title="复位中心点">🏠</button>
+            <button class="tool-btn" id="btn-home" title="复位绵阳市中心">🏠</button>
             <button class="tool-btn" id="btn-measure-dist" title="空间测距">📏</button>
             <button class="tool-btn" id="btn-measure-area" title="面积测量">▱</button>
             <button class="tool-btn" id="btn-identify" title="属性识别模式">ℹ️</button>
